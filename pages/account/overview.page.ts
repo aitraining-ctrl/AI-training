@@ -1,13 +1,32 @@
 import { Page, Locator } from '@playwright/test';
+import { AccountNav } from './account-nav.component';
+import { ProfilePage } from './profile.page';
 
 export class AccountOverviewPage {
   readonly page: Page;
- 
+  readonly nav: AccountNav;
+  readonly wrapper: Locator;
+  readonly welcomeMessage: Locator;
+  readonly customerEmail: Locator;
+
   constructor(page: Page) {
     this.page = page;
+    this.nav = new AccountNav(page);
+    this.wrapper = page.getByTestId('overview-page-wrapper');
+    this.welcomeMessage = page.getByTestId('welcome-message');
+    this.customerEmail = page.getByTestId('customer-email');
   }
 
-  async isLoaded() {
-    await this.page.waitForURL(/\/dk\/account/);
+  async goto() {
+    await this.page.goto('/dk/account');
+  }
+
+  async waitForLoaded() {
+    await this.wrapper.waitFor();
+  }
+
+  async openProfile(): Promise<ProfilePage> {
+    await this.nav.profileLink.click();
+    return new ProfilePage(this.page);
   }
 }
