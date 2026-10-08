@@ -4,23 +4,25 @@ Automated UI tests for the Medusa Store QA Sandbox using **Playwright** and **Ty
 
 ## 🎯 Target
 
-| Key              | Value                                                          |
-|------------------|----------------------------------------------------------------|
-| **Base URL**     | `https://qa-sandbox-candidate-smoke.fly.dev`                   |
-| **Admin Login**  | `` / ``                          |
-| **Coverage**     | Storefront, Customer Account, Cart, Navigation                 |
+| Key          | Value                                          |
+|--------------|------------------------------------------------|
+| **Base URL** | `https://qa-sandbox-candidate-smoke.fly.dev`   |
+| **Locale**   | `/dk` (all storefront paths start with it)     |
+| **Coverage** | Login, Customer Account                        |
 
 ---
 
 ## 🛠 Tech Stack
 
-| Layer            | Choice                        |
-|------------------|-------------------------------|
-| Framework        | Playwright Test               |
-| Language         | TypeScript                    |
-| Pattern          | Page Object Model (POM)       |
-| Auth Strategy    | `storageState` (reuse login)  |
-| Reporter         | HTML                          |
+| Layer         | Choice                                   |
+|---------------|------------------------------------------|
+| Framework     | Playwright Test                          |
+| Language      | TypeScript (strict)                      |
+| Pattern       | Page Object Model (POM)                  |
+| Auth Strategy | `storageState` (login once in setup)     |
+| Config        | `.env` via dotenv                        |
+| Lint          | ESLint + `eslint-plugin-playwright`      |
+| Reporter      | HTML                                     |
 
 ---
 
@@ -28,30 +30,30 @@ Automated UI tests for the Medusa Store QA Sandbox using **Playwright** and **Ty
 
 ```
 AI-training/
-├── tests/                    # Test files and support code
-│   ├── auth/                 # Auth setup & auth tests
-│   │   ├── global.setup.ts   # Generates storageState (admin.json)
-│   │   └── auth.login.spec.ts
-│   ├── pages/                # Page Objects (selectors live here only)
-│   │   ├── login/
-│   │   │   └── login.page.ts
-│   │   └── account/
-│   │       ├── overview.page.ts
-│   │       ├── profile.page.ts
-│   │       ├── addresses.page.ts
-│   │       └── orders.page.ts
-│   ├── helpers/              # Reusable logic (API, cart, addresses)
-│   ├── fixtures/             # Playwright custom fixtures
-│   │   └── auth.fixtures.ts
-│   ├── factories/            # Test data generators
-│   ├── assertions/           # Custom matchers
-│   └── auth/                 # Saved sessions (gitignored!)
-│       └── admin.json
-├── fixtures/                 # Shared fixtures (root level)
-│   └── auth.fixtures.ts
+├── config/
+│   └── env.ts                       # Env variables + storageState path
+├── pages/                           # Page Objects — selectors live ONLY here
+│   ├── login/
+│   │   └── login.page.ts
+│   └── account/
+│       ├── account-nav.component.ts # Side nav shared by /dk/account/* pages
+│       ├── overview.page.ts
+│       └── profile.page.ts
+├── helpers/
+│   └── auth.helper.ts               # Login flows reused by setup/tests
+├── fixtures/
+│   └── index.ts                     # Custom fixtures: import test/expect from here
+├── tests/
+│   ├── auth/
+│   │   ├── global.setup.ts          # Logs in as admin, saves storageState
+│   │   └── login.spec.ts
+│   └── account/
+│       └── profile-navigation.spec.ts
+├── playwright/.auth/                # Saved sessions (gitignored)
+├── .env.example
+├── eslint.config.mjs
 ├── playwright.config.ts
-├── package.json
-└── README.md
+└── tsconfig.json
 ```
 
 ---
@@ -65,73 +67,70 @@ AI-training/
 ### Installation
 
 ```powershell
-# Clone the repository
-git clone <your-repo-url>
-cd AI-training
-
-# Install dependencies
 npm install
+npx playwright install chromium
 
-# Install Playwright browsers
-npx playwright install
+# Create your local env file and fill in the sandbox credentials
+Copy-Item .env.example .env
 ```
 
-### Running Tests
+### Running
+
+| Command               | What it does                               |
+|-----------------------|--------------------------------------------|
+| `npm test`            | Run all tests (headless)                   |
+| `npm run test:headed` | Run with a visible browser                 |
+| `npm run test:ui`     | Playwright UI mode                         |
+| `npm run report`      | Open the last HTML report                  |
+| `npm run lint`        | ESLint (enforces the architecture rules)   |
+| `npm run typecheck`   | TypeScript check without emitting          |
 
 ```powershell
-# Run all tests (headless)
-npx playwright test
+# Run a single file
+npx playwright test tests/auth/login.spec.ts
 
-# Run with visible browser
-npx playwright test --headed
-
-# Run with Playwright UI mode (interactive)
-npx playwright test --ui
-
-# Run a specific test file
-npx playwright test tests/auth/auth.login.spec.ts
-
-# Run only the setup (generate auth state)
+# Only regenerate the auth session
 npx playwright test --project=setup
-
-# View the HTML report
-npx playwright show-report
 ```
 
 ---
 
 ## 🔐 Authentication
 
-Tests use **reusable login sessions** via Playwright's `storageState`:
-
-1. The `setup` project runs **first** and logs in as admin.
-2. It saves cookies & localStorage to `tests/auth/admin.json`.
-3. All other tests automatically load this file — **no repeated logins**.
+1. The `setup` project runs **first**, logs in as admin with `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env` and saves the session to `playwright/.auth/admin.json`.
+2. The `chromium` project loads that session for every test — **no repeated logins**.
+3. Tests that check the login itself opt out of the saved session:
 
 ```typescript
-// In any test file:
-test.use({ storageState: 'tests/auth/admin.json' });
+test.use({ storageState: { cookies: [], origins: [] } });
 ```
 
-> ⚠️ The `tests/auth/*.json` files are **gitignored** and must never be committed.
+> ⚠️ `.env` and `playwright/.auth/` are **gitignored** and must never be committed. In CI the credentials come from GitHub Secrets `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
 ---
 
 ## 🏗 Architecture Rules
 
-| Rule | Description |
-|------|-------------|
-| **POM** | Every page/component has its own class in `pages/`. Selectors live **only** inside Page Objects. |
-| **No raw locators in tests** | Tests must not use `page.locator(...)` directly. Use Page Object methods or fixtures. |
-| **Test isolation** | Each test has explicit setup/teardown. Any test can run independently. |
+| Rule | Description | Enforced by |
+|------|-------------|-------------|
+| **POM** | Every page/component has its own class in `pages/`. Selectors live **only** inside Page Objects. | ESLint: no `locator()` / `getBy*()` in `tests/` |
+| **Navigation via POM** | Tests open pages with Page Object `goto()`, not `page.goto()`. | ESLint |
+| **`data-testid` locators** | Use `getByTestId(...)`; scope with a parent (`this.root.getByTestId(...)`) instead of XPath or indexes. | Review |
+| **Actions in POM, assertions in tests** | Page Objects expose locators and actions; `expect(...)` lives in the spec. | Review |
+| **Web-first assertions** | `await expect(locator).toBeVisible()` etc. — they auto-wait. | Review |
+| **No hard waits** | No `waitForTimeout`. Wait for an element or URL. | ESLint |
+| **Test isolation** | Each test can run on its own, in any order. | Review |
+| **Naming** | `ID: what is expected`, e.g. `AUTH-02: error is shown for a wrong password`. | Review |
 
 ---
 
 ## 📋 Test Cases
 
-| ID       | Description                              | Priority | Status |
-|----------|------------------------------------------|----------|--------|
-| AUTH-01  | Successful admin login → account page    | P0       | ✅      |
+| ID      | Description                                    | File                                    | Status |
+|---------|------------------------------------------------|-----------------------------------------|--------|
+| AUTH-01 | Admin logs in with valid credentials           | `tests/auth/login.spec.ts`              | ✅     |
+| AUTH-02 | Error is shown for a wrong password            | `tests/auth/login.spec.ts`              | ✅     |
+| ACC-01  | Profile page opens from the account navigation | `tests/account/profile-navigation.spec.ts` | ✅  |
 
 ---
 
@@ -139,14 +138,14 @@ test.use({ storageState: 'tests/auth/admin.json' });
 
 Key settings in `playwright.config.ts`:
 
-| Setting        | Value                                              |
-|----------------|----------------------------------------------------|
-| `testDir`      | `./tests`                                          |
-| `baseURL`      | `https://qa-sandbox-candidate-smoke.fly.dev`       |
-| `retries`      | 1 on CI, 0 locally                                 |
-| `workers`      | 1 on CI, all cores locally                         |
-| `trace`        | On first retry                                     |
-| `screenshot`   | Only on failure                                    |
+| Setting      | Value                                   |
+|--------------|-----------------------------------------|
+| `testDir`    | `./tests`                               |
+| `baseURL`    | `BASE_URL` from `.env` (host only)      |
+| `retries`    | 1 on CI, 0 locally                      |
+| `workers`    | 1 on CI, all cores locally              |
+| `trace`      | On first retry                          |
+| `screenshot` | Only on failure                         |
 
 ---
 
@@ -154,11 +153,12 @@ Key settings in `playwright.config.ts`:
 
 | Problem | Solution |
 |---------|----------|
-| `No tests found` | Check that `testDir` in `playwright.config.ts` matches your folder name |
-| `ENOENT: admin.json` | Run `npx playwright test --project=setup` first to generate the auth file |
-| `Strict mode violation` | Element found multiple times — chain locators: `getByTestId('parent').getByTestId('child')` |
+| `Missing env variable ADMIN_EMAIL` | Copy `.env.example` to `.env` and fill it in |
+| `ENOENT: admin.json` | Run `npx playwright test --project=setup` first |
+| `Strict mode violation` | Element found multiple times — scope it: `getByTestId('parent').getByTestId('child')` |
 | PowerShell script error | Run: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` |
-| Timeout on `fill()` | Wrong selector — use `npx playwright codegen <url>` to find correct selectors |
+| Timeout on `fill()` | Wrong selector — use `npx playwright codegen <url>` to find the `data-testid` |
+| `waitForLoadState('networkidle')` never resolves | The storefront keeps background requests open; wait for a specific element instead |
 
 ---
 

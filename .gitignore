@@ -5,4 +5,9 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
-tests/auth/*.json 
+
+# Local secrets
+.env
+
+# Playwright MCP
+.playwright-mcp/
