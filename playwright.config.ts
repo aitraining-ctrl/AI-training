@@ -1,25 +1,24 @@
 import 'dotenv/config';
 import { defineConfig, devices } from '@playwright/test';
-import { env, ADMIN_STORAGE_STATE } from './config/env';
+import { env, ADMIN_STORAGE_STATE, CUSTOMER_STORAGE_STATE } from './config/env';
 
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
   testDir: './tests',
-  /* Run tests in files in parallel */
+  /* Tests of one stand share one database: keep them sequential. */
   fullyParallel: false,
+  workers: 1,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 1 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  reporter: [['html'], ['json', { outputFile: 'test-results/results.json' }]],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    /* Host only: page paths (e.g. '/dk/account') live in Page Objects. */
+    /* Host of the stand (from SESSION_URL): page paths (e.g. '/dk/account') live in Page Objects. */
     baseURL: env.baseUrl,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
@@ -34,6 +33,13 @@ export default defineConfig({
     },
     {
       name: 'chromium',
+      testIgnore: /[\\/]admin[\\/]/,
+      use: { ...devices['Desktop Chrome'], storageState: CUSTOMER_STORAGE_STATE },
+      dependencies: ['setup'],
+    },
+    {
+      name: 'admin',
+      testMatch: /[\\/]admin[\\/].*\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], storageState: ADMIN_STORAGE_STATE },
       dependencies: ['setup'],
     },

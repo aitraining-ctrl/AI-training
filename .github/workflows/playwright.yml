@@ -1,13 +1,20 @@
 name: Playwright Tests
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+  workflow_dispatch:
+# Tests of one stand share one database: never run two e2e jobs at once.
+concurrency:
+  group: e2e-${{ github.repository }}
+  cancel-in-progress: false
 jobs:
   test:
-    timeout-minutes: 60
+    timeout-minutes: 30
     runs-on: ubuntu-latest
+    env:
+      SESSION_URL: ${{ secrets.SESSION_URL }}
+      ADMIN_URL: ${{ secrets.ADMIN_URL }}
+      ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
@@ -19,17 +26,20 @@ jobs:
       run: npm run lint
     - name: Typecheck
       run: npm run typecheck
+    - name: Skip e2e without a stand
+      if: ${{ env.SESSION_URL == '' }}
+      run: echo "::notice::Secret SESSION_URL is not set, e2e tests skipped. Add SESSION_URL (and ADMIN_EMAIL / ADMIN_PASSWORD) in Settings > Secrets and variables > Actions."
     - name: Install Playwright Browsers
+      if: ${{ env.SESSION_URL != '' }}
       run: npx playwright install --with-deps chromium
     - name: Run Playwright tests
+      if: ${{ env.SESSION_URL != '' }}
       run: npx playwright test
-      env:
-        BASE_URL: ${{ vars.BASE_URL }}
-        ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-        ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
     - uses: actions/upload-artifact@v4
-      if: ${{ !cancelled() }}
+      if: ${{ !cancelled() && env.SESSION_URL != '' }}
       with:
         name: playwright-report
-        path: playwright-report/
+        path: |
+          playwright-report/
+          test-results/results.json
         retention-days: 30
