@@ -2,6 +2,8 @@
 
 Automated UI tests for the Medusa Store QA Sandbox using **Playwright** and **TypeScript**.
 
+> 📝 **Task branch `task/ui-tests`:** start with [TASK.md](TASK.md): the task, the manual cases in `test-cases/` and the result templates in `solution/`.
+
 ## 🎯 Target
 
 | Key          | Value                                                              |
@@ -10,7 +12,7 @@ Automated UI tests for the Medusa Store QA Sandbox using **Playwright** and **Ty
 | **Entry**    | `SESSION_URL`: the session link of your stand (a secret)           |
 | **Locale**   | `/dk` (all storefront paths start with it)                         |
 | **Admin**    | Medusa Admin at `/app` (credentials from the access dialog)        |
-| **Coverage** | Login, Customer Account, Admin                                     |
+| **Coverage** | Login, Customer Account, Catalog, Admin                            |
 
 > The reference tests show the **code style and architecture**, not a green run: your stand may contain defects in any area.
 
@@ -42,6 +44,9 @@ AI-training/
 │   ├── login/
 │   │   ├── login.page.ts
 │   │   └── register.page.ts
+│   ├── store/                       # Storefront: catalog and product page
+│   │   ├── store.page.ts
+│   │   └── product.page.ts
 │   ├── admin/                       # Medusa Admin (/app): no data-testid, use roles
 │   │   ├── admin-sidebar.component.ts
 │   │   ├── admin-login.page.ts
@@ -52,6 +57,8 @@ AI-training/
 │       ├── overview.page.ts
 │       └── profile.page.ts
 ├── helpers/
+│   ├── api/
+│   │   └── admin-api.ts             # Admin API client (admin session cookie)
 │   ├── auth.helper.ts               # Open session link, register customer
 │   └── customer.helper.ts           # Save/load the customer created in setup
 ├── fixtures/
@@ -63,9 +70,14 @@ AI-training/
 │   │   └── login.spec.ts
 │   ├── admin/
 │   │   └── admin.spec.ts
+│   ├── store/
+│   │   └── catalog.spec.ts
 │   └── account/
 │       └── profile-navigation.spec.ts
+├── test-cases/                      # Manual test cases (input of the task)
+├── solution/                        # Templates of the task results
 ├── playwright/.auth/                # Saved sessions (gitignored)
+├── TASK.md
 ├── .env.example
 ├── eslint.config.mjs
 ├── playwright.config.ts
@@ -129,6 +141,8 @@ test.use({ storageState: SESSION_STORAGE_STATE });
 
 > The Medusa Admin UI has no `data-testid`: locate elements by role, name or placeholder (`getByRole`, `getByPlaceholder`), still only inside Page Objects.
 
+**Admin API.** The `adminApi` fixture calls the Medusa Admin API (`/admin/*`) with the admin session from `admin.json`, in any project. Use it to check the result of a UI action or to read the expected data from the stand instead of hardcoding it (see `STORE-01`). The Store API (`/store/*`) needs a publishable API key and is not wrapped.
+
 > ⚠️ `.env` and `playwright/.auth/` are **gitignored** and must never be committed. In CI the values come from GitHub Secrets `SESSION_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (and optionally `ADMIN_URL`) of your own repository; without `SESSION_URL` the e2e step is skipped and only lint and typecheck run.
 
 ---
@@ -156,6 +170,8 @@ test.use({ storageState: SESSION_STORAGE_STATE });
 | AUTH-01 | Customer logs in with valid credentials        | `tests/auth/login.spec.ts`              | ✅     |
 | AUTH-02 | Error is shown for a wrong password            | `tests/auth/login.spec.ts`              | ✅     |
 | ACC-01  | Profile page opens from the account navigation | `tests/account/profile-navigation.spec.ts` | ✅  |
+| STORE-01 | Catalog lists every published product (UI + API) | `tests/store/catalog.spec.ts`         | ✅     |
+| STORE-02 | Product page opens from the catalog card      | `tests/store/catalog.spec.ts`           | ✅     |
 | ADM-01  | Admin logs in with valid credentials           | `tests/admin/admin.spec.ts`             | ✅     |
 | ADM-02  | Customer registered on the storefront is listed in admin | `tests/admin/admin.spec.ts`   | ✅     |
 
