@@ -1,5 +1,6 @@
 import { Page, Locator } from '@playwright/test';
 import { AccountOverviewPage } from '../account/overview.page';
+import { RegisterPage } from './register.page';
 
 export class LoginPage {
   readonly page: Page;
@@ -7,6 +8,7 @@ export class LoginPage {
   readonly passwordInput: Locator;
   readonly submitButton: Locator;
   readonly errorMessage: Locator;
+  readonly registerLink: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -14,6 +16,12 @@ export class LoginPage {
     this.passwordInput = page.getByTestId('password-input');
     this.submitButton = page.getByTestId('sign-in-button');
     this.errorMessage = page.getByTestId('login-error-message');
+    this.registerLink = page.getByTestId('register-button');
+  }
+
+  async openRegister(): Promise<RegisterPage> {
+    await this.registerLink.click();
+    return new RegisterPage(this.page);
   }
 
   async goto() {

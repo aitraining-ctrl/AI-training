@@ -4,11 +4,15 @@ Automated UI tests for the Medusa Store QA Sandbox using **Playwright** and **Ty
 
 ## 🎯 Target
 
-| Key          | Value                                          |
-|--------------|------------------------------------------------|
-| **Base URL** | `https://qa-sandbox-candidate-smoke.fly.dev`   |
-| **Locale**   | `/dk` (all storefront paths start with it)     |
-| **Coverage** | Login, Customer Account                        |
+| Key          | Value                                                              |
+|--------------|--------------------------------------------------------------------|
+| **Stand**    | Your own Medusa Store, issued with your task (own DB, own bugs)    |
+| **Entry**    | `SESSION_URL`: the session link of your stand (a secret)           |
+| **Locale**   | `/dk` (all storefront paths start with it)                         |
+| **Admin**    | Medusa Admin at `/app` (credentials from the access dialog)        |
+| **Coverage** | Login, Customer Account, Admin                                     |
+
+> The reference tests show the **code style and architecture**, not a green run: your stand may contain defects in any area.
 
 ---
 
@@ -19,10 +23,10 @@ Automated UI tests for the Medusa Store QA Sandbox using **Playwright** and **Ty
 | Framework     | Playwright Test                          |
 | Language      | TypeScript (strict)                      |
 | Pattern       | Page Object Model (POM)                  |
-| Auth Strategy | `storageState` (login once in setup)     |
+| Auth Strategy | `storageState` (session + customer created once in setup) |
 | Config        | `.env` via dotenv                        |
 | Lint          | ESLint + `eslint-plugin-playwright`      |
-| Reporter      | HTML                                     |
+| Reporter      | HTML + JSON (`test-results/results.json`) |
 
 ---
 
@@ -31,22 +35,34 @@ Automated UI tests for the Medusa Store QA Sandbox using **Playwright** and **Ty
 ```
 AI-training/
 ├── config/
-│   └── env.ts                       # Env variables + storageState path
+│   └── env.ts                       # Env variables + storageState paths
+├── data/
+│   └── customer.ts                  # Test data factory (unique customer)
 ├── pages/                           # Page Objects — selectors live ONLY here
 │   ├── login/
-│   │   └── login.page.ts
+│   │   ├── login.page.ts
+│   │   └── register.page.ts
+│   ├── admin/                       # Medusa Admin (/app): no data-testid, use roles
+│   │   ├── admin-sidebar.component.ts
+│   │   ├── admin-login.page.ts
+│   │   ├── admin-orders.page.ts
+│   │   └── admin-customers.page.ts
 │   └── account/
 │       ├── account-nav.component.ts # Side nav shared by /dk/account/* pages
 │       ├── overview.page.ts
 │       └── profile.page.ts
 ├── helpers/
-│   └── auth.helper.ts               # Login flows reused by setup/tests
+│   ├── auth.helper.ts               # Open session link, register customer
+│   └── customer.helper.ts           # Save/load the customer created in setup
 ├── fixtures/
 │   └── index.ts                     # Custom fixtures: import test/expect from here
 ├── tests/
 │   ├── auth/
-│   │   ├── global.setup.ts          # Logs in as admin, saves storageState
+│   │   ├── global.setup.ts          # Opens session link, registers customer, saves storageState
+│   │   ├── admin.setup.ts           # Opens session link, logs in to admin, saves storageState
 │   │   └── login.spec.ts
+│   ├── admin/
+│   │   └── admin.spec.ts
 │   └── account/
 │       └── profile-navigation.spec.ts
 ├── playwright/.auth/                # Saved sessions (gitignored)
@@ -70,9 +86,11 @@ AI-training/
 npm install
 npx playwright install chromium
 
-# Create your local env file and fill in the sandbox credentials
+# Create your local env file and fill in the values of YOUR stand (from your task)
 Copy-Item .env.example .env
 ```
+
+> Work in a **private** repository of your own (never a public fork): your solutions must not be visible to others. Keep `.env` out of git: `SESSION_URL` is a secret.
 
 ### Running
 
@@ -97,15 +115,21 @@ npx playwright test --project=setup
 
 ## 🔐 Authentication
 
-1. The `setup` project runs **first**, logs in as admin with `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env` and saves the session to `playwright/.auth/admin.json`.
-2. The `chromium` project loads that session for every test — **no repeated logins**.
-3. Tests that check the login itself opt out of the saved session:
+The stand is selected by a **cookie** that the session link sets; all stands share one host.
+
+1. The `setup` project runs **first**: it opens `SESSION_URL` (the stand cookie is set), saves it to `playwright/.auth/session.json`, then registers a new customer with a unique email and saves the logged-in state to `playwright/.auth/customer.json`. The customer credentials go to `playwright/.auth/customer-data.json` and are available in tests as the `customer` fixture.
+2. The `chromium` project loads the customer session for every test — **no repeated logins**.
+3. Tests that check the login itself keep the stand cookie but drop the customer:
 
 ```typescript
-test.use({ storageState: { cookies: [], origins: [] } });
+test.use({ storageState: SESSION_STORAGE_STATE });
 ```
 
-> ⚠️ `.env` and `playwright/.auth/` are **gitignored** and must never be committed. In CI the credentials come from GitHub Secrets `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+**Admin.** `ADMIN_EMAIL` / `ADMIN_PASSWORD` are the **Medusa Admin** (`/app`) credentials of your stand; they do not work on the storefront login (`/dk/account`). `admin.setup.ts` logs in and saves `playwright/.auth/admin.json`; specs in `tests/admin/` run in the `admin` project with that session, everything else runs in the `chromium` project with the customer session. `ADMIN_URL` (the admin link from the access dialog) is optional: like the session link it selects the stand by cookie, so without it the admin is opened at `/app`.
+
+> The Medusa Admin UI has no `data-testid`: locate elements by role, name or placeholder (`getByRole`, `getByPlaceholder`), still only inside Page Objects.
+
+> ⚠️ `.env` and `playwright/.auth/` are **gitignored** and must never be committed. In CI the values come from GitHub Secrets `SESSION_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (and optionally `ADMIN_URL`) of your own repository; without `SESSION_URL` the e2e step is skipped and only lint and typecheck run.
 
 ---
 
@@ -120,6 +144,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 | **Web-first assertions** | `await expect(locator).toBeVisible()` etc. — they auto-wait. | Review |
 | **No hard waits** | No `waitForTimeout`. Wait for an element or URL. | ESLint |
 | **Test isolation** | Each test can run on its own, in any order. | Review |
+| **Unique test data** | Stand data persists between runs: create data through `data/` factories with unique values, never hardcode emails. | Review |
 | **Naming** | `ID: what is expected`, e.g. `AUTH-02: error is shown for a wrong password`. | Review |
 
 ---
@@ -128,9 +153,11 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 | ID      | Description                                    | File                                    | Status |
 |---------|------------------------------------------------|-----------------------------------------|--------|
-| AUTH-01 | Admin logs in with valid credentials           | `tests/auth/login.spec.ts`              | ✅     |
+| AUTH-01 | Customer logs in with valid credentials        | `tests/auth/login.spec.ts`              | ✅     |
 | AUTH-02 | Error is shown for a wrong password            | `tests/auth/login.spec.ts`              | ✅     |
 | ACC-01  | Profile page opens from the account navigation | `tests/account/profile-navigation.spec.ts` | ✅  |
+| ADM-01  | Admin logs in with valid credentials           | `tests/admin/admin.spec.ts`             | ✅     |
+| ADM-02  | Customer registered on the storefront is listed in admin | `tests/admin/admin.spec.ts`   | ✅     |
 
 ---
 
@@ -141,9 +168,10 @@ Key settings in `playwright.config.ts`:
 | Setting      | Value                                   |
 |--------------|-----------------------------------------|
 | `testDir`    | `./tests`                               |
-| `baseURL`    | `BASE_URL` from `.env` (host only)      |
+| `baseURL`    | Host of `SESSION_URL` from `.env`       |
 | `retries`    | 1 on CI, 0 locally                      |
-| `workers`    | 1 on CI, all cores locally              |
+| `workers`    | 1 (one stand = one database)            |
+| `reporter`   | HTML + JSON (`test-results/results.json`) |
 | `trace`      | On first retry                          |
 | `screenshot` | Only on failure                         |
 
@@ -153,8 +181,10 @@ Key settings in `playwright.config.ts`:
 
 | Problem | Solution |
 |---------|----------|
-| `Missing env variable ADMIN_EMAIL` | Copy `.env.example` to `.env` and fill it in |
-| `ENOENT: admin.json` | Run `npx playwright test --project=setup` first |
+| `Missing env variable SESSION_URL` | Copy `.env.example` to `.env` and fill it in |
+| `The stand rejected SESSION_URL (403)` or the page says "A session link is required" | The link was revoked (new link, stand handed over or released). Take a fresh link from your task, update `.env`, rerun |
+| `The stand does not respond (HTTP 502)` | The link is valid but the stand services are down or still starting. Wait a minute and rerun; if it persists, contact the support of your task |
+| `ENOENT: customer.json` / `customer-data.json` | Run `npx playwright test --project=setup` first |
 | `Strict mode violation` | Element found multiple times — scope it: `getByTestId('parent').getByTestId('child')` |
 | PowerShell script error | Run: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` |
 | Timeout on `fill()` | Wrong selector — use `npx playwright codegen <url>` to find the `data-testid` |
