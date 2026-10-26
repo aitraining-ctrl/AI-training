@@ -1,0 +1,166 @@
+# Flaky tests — store listing
+
+Deliberate, controlled flakiness for practice. Five tests over `/dk/store`,
+each modelling a different way a UI test goes wrong. **They are not a defect in
+this branch** — they are the point of it.
+
+The default suite (`npm test`) is green and does not run these. They live in
+their own Playwright project, `flaky`.
+
+---
+
+## Running them
+
+```bash
+npm ci                       # once
+npm run test:flaky           # run once
+npm run test:flaky:repeat    # 5x each — this is where you see the variance
+```
+
+Direct, if you prefer:
+
+```bash
+npx playwright test --project=flaky
+npx playwright test --project=flaky --repeat-each 10
+npx playwright test --project=flaky --grep "STORE-02:"
+npx playwright test --project=flaky --headed          # watch it happen
+npx playwright test --project=flaky --debug           # step through
+```
+
+Green baseline is unaffected:
+
+```bash
+npm test                     # 4 passed — the real suite
+```
+
+---
+
+## The five cases
+
+| ID | Archetype | Behaviour |
+|---|---|---|
+| `STORE-01` | Asserts on list **order** the UI never promised | passes 8/8 — **latent** |
+| `STORE-02` | **Hydration race** — sort clicked before React attaches | **~40–60% pass — genuinely flaky** |
+| `STORE-03` | Reads a count instead of waiting for it | passes 8/8 — **latent** |
+| `STORE-04` | `waitForTimeout(150)` — sleep-based sync | passes here, **breaks in CI** |
+| `STORE-05` | Hardcoded absolute URL, ignores `BASE_URL` | breaks on **any other host** |
+
+Only `STORE-02` is intermittent right now. The other four are **latent**: they
+pass today and fail the moment the catalogue, the network, or the environment
+changes. Both kinds are worth knowing — a latent one is worse, because it fails
+later, in a context that looks unrelated to whatever caused it.
+
+### STORE-02 in detail
+
+The sort control is in the server-rendered HTML, so it is clickable before
+React has attached its click handler. A click in that window is swallowed — no
+error, no network request — and the list stays unsorted.
+
+The trap: the obvious guard does not help. `waitForLoaded()` waits for the first
+product card, but the cards are server-rendered too, so they are already in the
+HTML. Waiting for them narrows the window without closing it.
+
+Measured on the inno.ws sandbox:
+
+| Condition | Result |
+|---|---|
+| Cold context | 2 failures / 15 runs (~13%) |
+| Warm session (`storageState` loaded) | 4 failures / 10 runs (~40% pass rate) |
+
+The warm case is worse because the page hydrates faster relative to the click.
+That difference is itself the lesson: flakiness depends on machine state.
+
+---
+
+## Why not just a wrong selector?
+
+A mistyped XPath fails on every run. That is a **bug**, not flakiness — the
+failure is deterministic, the error message names the selector, and the fix is
+obvious. It teaches nothing about diagnosis.
+
+Flakiness is nondeterministic: the same code, the same commit, different
+outcomes. That is what actually costs teams time, because it trains people to
+re-run until green.
+
+---
+
+## Your task
+
+Each test has a comment naming its archetype and the fix. Try this order:
+
+1. Run `npm run test:flaky:repeat`. Note which tests fail and how often.
+2. **Do not change the test yet.** Run it again. Did the same ones fail?
+3. For each test, answer: *what is the test actually waiting for, and is that
+   the thing it depends on?*
+4. Fix them. Aim for tests that pass reliably **and** would still fail if the
+   behaviour genuinely broke.
+5. Delete the `eslint-disable` in `STORE-04` and run `npm run lint`. The repo's
+   own rule catches the sleep.
+
+A fix that "works" by adding a longer `waitForTimeout` is not a fix — it moves
+the race, it does not close it. You can tell the difference by running
+`--repeat-each 20` on a throttled connection.
+
+---
+
+## Expected fixes
+
+<details>
+<summary>Reveal after trying</summary>
+
+- **STORE-01** — compare sets, not positions:
+  `expect(names.sort()).toEqual([...].sort())` or `arrayContaining`.
+- **STORE-02** — wait for interactivity, not paint. Await the sort request's
+  response, or poll until the order actually changes:
+  `await expect.poll(() => storePage.productNames().then(n => n[0])).toBe('Medusa T-Shirt')`.
+- **STORE-03** — `await expect(storePage.productCards).toHaveCount(4)` — a
+  web-first assertion that retries until the count settles.
+- **STORE-04** — drop the sleep; `await expect(storePage.productPrices).toHaveCount(4)`.
+- **STORE-05** — compare a path, not an origin: `await expect(page).toHaveURL(/\/dk\/store$/)`.
+
+</details>
+
+---
+
+## Requirements
+
+`AI-training/.env` must exist (copy `.env.example`):
+
+```env
+BASE_URL=https://qa-sandbox.inno.ws
+SESSION_LINK=https://qa-sandbox.inno.ws/s/<id>
+ADMIN_EMAIL=
+ADMIN_PASSWORD=
+```
+
+`SESSION_LINK` is only needed for hosts gated behind an access link — the whole
+sandbox answers `403 "A session link is required"` without it. The public
+`fly.dev` sandbox does not use it; leave it empty there.
+
+`playwright/.auth/admin.json` is generated by the `setup` project, which the
+`flaky` project depends on — so `npm run test:flaky` regenerates it if missing.
+
+---
+
+## How the isolation works
+
+`playwright.config.ts` defines two projects:
+
+| Project | Tests | Purpose |
+|---|---|---|
+| `chromium` | everything except `store.spec.ts` | the real suite |
+| `flaky` | `tests/store/store.spec.ts` only | this file's tests |
+
+`package.json` scripts pin `--project=chromium`, so `npm test` never picks these
+up. Remove that flag and the flaky tests run by default — which is exactly what
+you do **not** want on `main`.
+
+---
+
+## If you make one of these pass reliably
+
+Good. Then make it **fail for the right reason** once, deliberately: break the
+behaviour the test protects and confirm the test notices. A test that cannot
+fail is not protecting anything.
+
+Related: `tests/store/store.spec.ts`, `pages/store/store.page.ts`.

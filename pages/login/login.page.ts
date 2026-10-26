@@ -1,5 +1,6 @@
 import { Page, Locator } from '@playwright/test';
 import { AccountOverviewPage } from '../account/overview.page';
+import { env } from '../../config/env';
 
 export class LoginPage {
   readonly page: Page;
@@ -17,6 +18,15 @@ export class LoginPage {
   }
 
   async goto() {
+    // The sandbox gates the whole host behind its session link; without this
+    // first hop every request is 403 and the form never renders.
+    if (env.sessionLink) {
+      const base = env.baseUrl.replace(/\/+$/, '');
+      const link = /^https?:\/\//i.test(env.sessionLink)
+        ? env.sessionLink
+        : `${base}/${env.sessionLink.replace(/^\/+/, '')}`;
+      await this.page.goto(link, { waitUntil: 'domcontentloaded' });
+    }
     await this.page.goto('/dk/account');
   }
 

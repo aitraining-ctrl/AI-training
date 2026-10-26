@@ -36,6 +36,15 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'], storageState: ADMIN_STORAGE_STATE },
       dependencies: ['setup'],
+      /* The flaky training fixtures live in their own project so the default
+       * run — and therefore main — stays green. */
+      testIgnore: /store\.spec\.ts/,
+    },
+    {
+      name: 'flaky',
+      use: { ...devices['Desktop Chrome'], storageState: ADMIN_STORAGE_STATE },
+      dependencies: ['setup'],
+      testMatch: /store\.spec\.ts/,
     },
   ],
 });
