@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="da">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hjem — promo banner after the redesign</title>
+  </head>
+  <body>
+    <!--
+      The same homepage promo slot as `promo-before.html`, after a redesign.
+      Synthetic — modelled on the kind of change a real release makes, not a
+      capture of the sandbox. Three of the four candidate strategies are dead:
+
+        * `data-testid="promo-banner"` was renamed to `offer-teaser`, and now
+          matches three elements, so it is not usable even by its new name
+        * the accessible name is translated ("Sommer udsalg")
+        * the creative was replaced, so the old image filename is gone
+
+      One strategy still lands: the campaign URL is the same route, just with a
+      query string. That is what the self-healing chain in
+      `pages/home/promo.page.ts` has to fall back to — and the reason it must
+      report the fallback rather than pass quietly.
+
+      Note the trap: `a:has(img)` matches three links here, and `.first()` would
+      happily resolve to "New arrivals" — a locator that finds exactly one
+      element and the WRONG one. Check what a candidate matches, not only
+      how many times.
+    -->
+    <main>
+      <section class="hero-carousel" data-carousel="home">
+        <h1>Medusa Store</h1>
+        <a data-testid="offer-teaser" href="/dk/collections/new">
+          <img src="https://example.invalid/new-arrivals.png" alt="Nye-varer" />
+        </a>
+        <a data-testid="offer-teaser" href="/dk/promo/summer?utm_source=home">
+          <img src="https://example.invalid/ss-2026-hero.jpg" alt="Sommer udsalg" />
+        </a>
+        <a data-testid="offer-teaser" href="/dk/collections/autumn">
+          <img src="https://example.invalid/autumn.png" alt="Efterår" />
+        </a>
+      </section>
+    </main>
+  </body>
+</html>

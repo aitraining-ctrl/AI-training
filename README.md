@@ -47,13 +47,18 @@ AI-training/
 │   │   ├── admin-login.page.ts
 │   │   ├── admin-orders.page.ts
 │   │   └── admin-customers.page.ts
-│   └── account/
-│       ├── account-nav.component.ts # Side nav shared by /dk/account/* pages
-│       ├── overview.page.ts
-│       └── profile.page.ts
+│   ├── account/
+│   │   ├── account-nav.component.ts # Side nav shared by /dk/account/* pages
+│   │   ├── overview.page.ts
+│   │   └── profile.page.ts
+│   ├── store/
+│   │   └── store.page.ts            # Catalog — deliberately brittle locators (topic 9 exercise)
+│   └── home/
+│       └── promo.page.ts            # Promo slot — self-healing candidate chain
 ├── helpers/
 │   ├── auth.helper.ts               # Open session link, register customer
-│   └── customer.helper.ts           # Save/load the customer created in setup
+│   ├── customer.helper.ts           # Save/load the customer created in setup
+│   └── locator-healing.ts           # Candidate-chain resolver: degraded match, loud empty failure
 ├── fixtures/
 │   └── index.ts                     # Custom fixtures: import test/expect from here
 ├── tests/
@@ -63,8 +68,12 @@ AI-training/
 │   │   └── login.spec.ts
 │   ├── admin/
 │   │   └── admin.spec.ts
-│   └── account/
-│       └── profile-navigation.spec.ts
+│   ├── account/
+│   │   └── profile-navigation.spec.ts
+│   └── locators/
+│       ├── locators.spec.ts         # Offline locator exercise (see LOCATOR-EXERCISE.md)
+│       └── fixtures/                # Saved DOM snapshots: today, after a UI change, promo
+├── LOCATOR-EXERCISE.md              # Topic 9: brittle locators + self-healing exercise
 ├── playwright/.auth/                # Saved sessions (gitignored)
 ├── .env.example
 ├── eslint.config.mjs
@@ -99,6 +108,7 @@ Copy-Item .env.example .env
 | `npm test`            | Run all tests (headless)                   |
 | `npm run test:headed` | Run with a visible browser                 |
 | `npm run test:ui`     | Playwright UI mode                         |
+| `npm run test:locators` | Offline locator exercise — no stand, no auth |
 | `npm run report`      | Open the last HTML report                  |
 | `npm run lint`        | ESLint (enforces the architecture rules)   |
 | `npm run typecheck`   | TypeScript check without emitting          |
@@ -129,7 +139,7 @@ test.use({ storageState: SESSION_STORAGE_STATE });
 
 > The Medusa Admin UI has no `data-testid`: locate elements by role, name or placeholder (`getByRole`, `getByPlaceholder`), still only inside Page Objects.
 
-> ⚠️ `.env` and `playwright/.auth/` are **gitignored** and must never be committed. In CI the values come from GitHub Secrets `SESSION_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (and optionally `ADMIN_URL`) of your own repository; without `SESSION_URL` the e2e step is skipped and only lint and typecheck run.
+> ⚠️ `.env` and `playwright/.auth/` are **gitignored** and must never be committed. In CI the values come from GitHub Secrets `SESSION_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (and optionally `ADMIN_URL`) of your own repository. Without `SESSION_URL` the e2e steps are skipped, but lint, typecheck and the offline `locators` project still run.
 
 ---
 
@@ -158,6 +168,17 @@ test.use({ storageState: SESSION_STORAGE_STATE });
 | ACC-01  | Profile page opens from the account navigation | `tests/account/profile-navigation.spec.ts` | ✅  |
 | ADM-01  | Admin logs in with valid credentials           | `tests/admin/admin.spec.ts`             | ✅     |
 | ADM-02  | Customer registered on the storefront is listed in admin | `tests/admin/admin.spec.ts`   | ✅     |
+| LOC-01  | Catalog locators survive a routine UI change (offline exercise) | `tests/locators/locators.spec.ts` | ⚠️ expected-fail |
+| LOC-02  | Primary locator strategy is enough when nothing changed | `tests/locators/locators.spec.ts` | ✅     |
+| LOC-03  | After a UI change a fallback fires and is reported as degraded | `tests/locators/locators.spec.ts` | ✅ |
+| LOC-04  | An exhausted chain fails with the list of strategies tried | `tests/locators/locators.spec.ts` | ✅ |
+
+`LOC-01` is deliberately failing: it is the input to the topic 9 exercise, not a
+broken test. It is marked `test.fail(...)` so the run stays green; see
+[LOCATOR-EXERCISE.md](LOCATOR-EXERCISE.md). Fix the locators in
+`pages/store/store.page.ts` and it turns green on its own — at which point
+Playwright reports it as "passed but was expected to fail" and you remove the
+annotation.
 
 ---
 
@@ -168,9 +189,10 @@ Key settings in `playwright.config.ts`:
 | Setting      | Value                                   |
 |--------------|-----------------------------------------|
 | `testDir`    | `./tests`                               |
-| `baseURL`    | Host of `SESSION_URL` from `.env`       |
+| `baseURL`    | Host of `SESSION_URL` from `.env` (`http://localhost` when unset) |
 | `retries`    | 1 on CI, 0 locally                      |
 | `workers`    | 1 (one stand = one database)            |
+| `projects`   | `setup`, `chromium`, `admin`, `locators` (offline, no setup) |
 | `reporter`   | HTML + JSON (`test-results/results.json`) |
 | `trace`      | On first retry                          |
 | `screenshot` | Only on failure                         |

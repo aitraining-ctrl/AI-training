@@ -13,7 +13,12 @@ export const env = {
   },
   /** Host of the stand, derived from the session link. Page paths live in Page Objects. */
   get baseUrl() {
-    const sessionUrl = this.sessionUrl;
+    const sessionUrl = process.env.SESSION_URL;
+    if (!sessionUrl) {
+      // Offline projects (e.g. the locator exercise) load file:// snapshots and
+      // never reach a stand. The setup project still fails fast via SESSION_URL.
+      return 'http://localhost';
+    }
     try {
       return new URL(sessionUrl).origin;
     } catch {

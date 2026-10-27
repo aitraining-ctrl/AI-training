@@ -26,15 +26,19 @@ jobs:
       run: npm run lint
     - name: Typecheck
       run: npm run typecheck
+    - name: Install Playwright Browsers
+      run: npx playwright install --with-deps chromium
+    - name: Run locator exercise
+      # Offline: loads saved DOM snapshots, needs no stand and no secrets.
+      # LOC-01 is marked test.fail, so an unfixed exercise is a green run.
+      run: npm run test:locators
     - name: Skip e2e without a stand
       if: ${{ env.SESSION_URL == '' }}
       run: echo "::notice::Secret SESSION_URL is not set, e2e tests skipped. Add SESSION_URL (and ADMIN_EMAIL / ADMIN_PASSWORD) in Settings > Secrets and variables > Actions."
-    - name: Install Playwright Browsers
-      if: ${{ env.SESSION_URL != '' }}
-      run: npx playwright install --with-deps chromium
     - name: Run Playwright tests
       if: ${{ env.SESSION_URL != '' }}
-      run: npx playwright test
+      # The locators project already ran above; don't pay for it twice.
+      run: npx playwright test --project=chromium --project=admin
     - uses: actions/upload-artifact@v4
       if: ${{ !cancelled() && env.SESSION_URL != '' }}
       with:

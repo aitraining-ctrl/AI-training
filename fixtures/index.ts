@@ -6,6 +6,8 @@ import { LoginPage } from '../pages/login/login.page';
 import { AccountOverviewPage } from '../pages/account/overview.page';
 import { AdminLoginPage } from '../pages/admin/admin-login.page';
 import { AdminOrdersPage } from '../pages/admin/admin-orders.page';
+import { StorePage } from '../pages/store/store.page';
+import { PromoPage } from '../pages/home/promo.page';
 
 type AuthFixtures = {
   authHelper: AuthHelper;
@@ -15,6 +17,8 @@ type AuthFixtures = {
   adminOrdersPage: AdminOrdersPage;
   /** Customer registered by the setup project on your stand. */
   customer: Customer;
+  storePage: StorePage;
+  promoPage: PromoPage;
 };
 
 export const test = base.extend<AuthFixtures>({
@@ -36,6 +40,12 @@ export const test = base.extend<AuthFixtures>({
   // eslint-disable-next-line no-empty-pattern
   customer: async ({}, use) => {
     await use(loadCustomer());
+  },
+  storePage: async ({ page }, use) => {
+    await use(new StorePage(page));
+  },
+  promoPage: async ({ page }, use) => {
+    await use(new PromoPage(page));
   },
 });
 

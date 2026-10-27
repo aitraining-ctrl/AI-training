@@ -33,7 +33,7 @@ export default defineConfig({
     },
     {
       name: 'chromium',
-      testIgnore: /[\\/]admin[\\/]/,
+      testIgnore: [/[\\/]admin[\\/]/, /[\\/]locators[\\/]/],
       use: { ...devices['Desktop Chrome'], storageState: CUSTOMER_STORAGE_STATE },
       dependencies: ['setup'],
     },
@@ -42,6 +42,13 @@ export default defineConfig({
       testMatch: /[\\/]admin[\\/].*\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], storageState: ADMIN_STORAGE_STATE },
       dependencies: ['setup'],
+    },
+    {
+      // Offline locator exercise: loads saved file:// DOM snapshots, no stand,
+      // no auth, no setup. Run with `npm run test:locators`.
+      name: 'locators',
+      testMatch: /[\\/]locators[\\/].*\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
     },
   ],
 });
