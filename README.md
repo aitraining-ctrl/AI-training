@@ -97,6 +97,7 @@ Copy-Item .env.example .env
 | Command               | What it does                               |
 |-----------------------|--------------------------------------------|
 | `npm test`            | Run all tests (headless)                   |
+| `npm run test:smoke`  | Curated smoke subset: the two login checks (AUTH-01, ADM-01) |
 | `npm run test:headed` | Run with a visible browser                 |
 | `npm run test:ui`     | Playwright UI mode                         |
 | `npm run report`      | Open the last HTML report                  |
